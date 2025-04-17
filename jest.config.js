@@ -25,6 +25,7 @@ module.exports = {
   // Exclude generated files from coverage
   coveragePathIgnorePatterns: [
     '/node_modules/',
-    '/src/generated/'
-  ],
+    '/src/generated/',
+    '/tests/functions/guardian/handler.integration.test.ts'
+  ], 
 }; 

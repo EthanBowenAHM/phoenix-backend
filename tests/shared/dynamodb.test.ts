@@ -3,9 +3,14 @@ import { DynamoDbConnector } from '../../src/shared/dynamodb';
 import { ColorRecord } from '../../src/generated/server';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
+interface MultiTenantColorRecord extends ColorRecord {
+  tenantId: string;
+  sk: string;
+}
+
 type DynamoDBResponse = {
-  Item?: ColorRecord | null;
-  Items?: ColorRecord[];
+  Item?: MultiTenantColorRecord | null;
+  Items?: MultiTenantColorRecord[];
   Attributes?: { colors: string[] };
 };
 
@@ -13,11 +18,14 @@ describe('DynamoDB Utils', () => {
   let dynamodb: DynamoDbConnector;
   let docClient: DynamoDBDocumentClient;
   let sendSpy: any;
+  const TEST_TENANT_ID = 'test-tenant';
 
-  const mockRecord: ColorRecord = {
+  const mockRecord: MultiTenantColorRecord = {
     pk: 'John',
     colors: ['blue'],
     timestamp: '2024-01-01T00:00:00.000Z',
+    tenantId: TEST_TENANT_ID,
+    sk: 'COLOR#1234567890'
   };
 
   beforeEach(() => {
@@ -149,17 +157,17 @@ describe('DynamoDB Utils', () => {
       const result = await dynamodb.saveColor(mockRecord);
 
       // Assert
-      expect(result).toEqual({ "colors": ['blue', 'red'] });
+      expect(result).toEqual(mockRecord);
       expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
         input: {
           TableName: process.env.TABLE_NAME,
-          Key: { pk: 'John' },
-          UpdateExpression: 'SET colors = list_append(if_not_exists(colors, :empty_list), :new_color)',
-          ExpressionAttributeValues: {
-            ':empty_list': [],
-            ':new_color': ['blue'],
+          Item: {
+            ...mockRecord,
+            pk: `TENANT#${TEST_TENANT_ID}#USER#John`,
+            sk: expect.stringMatching(/^COLOR#\d+$/),
+            timestamp: expect.any(String)
           },
-          ReturnValues: 'ALL_NEW',
+          ConditionExpression: 'attribute_not_exists(pk)'
         }
       }));
     });
@@ -178,7 +186,7 @@ describe('DynamoDB Utils', () => {
     it('should successfully add a color', async () => {
       // Arrange
       const response: DynamoDBResponse = {
-        Attributes: { colors: ['blue'] }
+        Item: mockRecord
       };
       sendSpy.mockResolvedValue(response);
 
@@ -186,17 +194,17 @@ describe('DynamoDB Utils', () => {
       const result = await dynamodb.saveColor(mockRecord);
 
       // Assert
-      expect(result).toEqual({ colors: ['blue'] });
+      expect(result).toEqual(mockRecord);
       expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
         input: {
           TableName: process.env.TABLE_NAME,
-          Key: { pk: 'John' },
-          UpdateExpression: 'SET colors = list_append(if_not_exists(colors, :empty_list), :new_color)',
-          ExpressionAttributeValues: {
-            ':empty_list': [],
-            ':new_color': ['blue'],
+          Item: {
+            ...mockRecord,
+            pk: `TENANT#${TEST_TENANT_ID}#USER#John`,
+            sk: expect.stringMatching(/^COLOR#\d+$/),
+            timestamp: expect.any(String)
           },
-          ReturnValues: 'ALL_NEW',
+          ConditionExpression: 'attribute_not_exists(pk)'
         }
       }));
     });
@@ -215,19 +223,25 @@ describe('DynamoDB Utils', () => {
     it('should successfully search colors with a pk', async () => {
       // Arrange
       const response = {
-        Item: { pk: 'John', colors: ['red'], timestamp: Date.now() }
+        Items: [mockRecord]
       };
       sendSpy.mockResolvedValue(response);
 
       // Act
-      const result = await dynamodb.searchColors('John');
+      const result = await dynamodb.searchColors(TEST_TENANT_ID, 'John');
 
       // Assert
-      expect(result).toEqual(response.Item);
+      expect(result).toEqual([mockRecord]);
       expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({
         input: {
           TableName: process.env.TABLE_NAME,
-          Key: { pk: 'John' }
+          IndexName: 'TenantIndex',
+          KeyConditionExpression: 'tenantId = :tenantId',
+          ExpressionAttributeValues: {
+            ':tenantId': TEST_TENANT_ID,
+            ':pk': 'John'
+          },
+          FilterExpression: 'pk = :pk'
         }
       }));
     });
@@ -238,7 +252,7 @@ describe('DynamoDB Utils', () => {
       sendSpy.mockRejectedValue(error);
 
       // Act & Assert
-      await expect(dynamodb.searchColors('John')).rejects.toThrow('DynamoDB error');
+      await expect(dynamodb.searchColors(TEST_TENANT_ID, 'John')).rejects.toThrow('DynamoDB error');
     });
   });
 }); 

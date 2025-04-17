@@ -3,6 +3,10 @@ import { ColorService } from '../../../src/functions/colorService/service';
 import { ColorSubmission, ColorRecord } from '../../../src/generated/server';
 import { DynamoDbConnector } from '../../../src/shared/dynamodb';
 
+interface MultiTenantColorSubmission extends ColorSubmission {
+  tenantId: string;
+}
+
 //jest.mock('../../../src/shared/dynamodb');
 
 describe('ColorService', () => {
@@ -10,6 +14,7 @@ describe('ColorService', () => {
   let dynamodb: DynamoDbConnector;
   let saveColorSubmissionSpy: any;
   let searchColorsSpy: any;
+  const TEST_TENANT_ID = 'test-tenant';
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -24,9 +29,10 @@ describe('ColorService', () => {
   describe('submitColor', () => {
     it('should successfully submit a color', async () => {
       // Arrange
-      const submission: ColorSubmission = {
+      const submission: MultiTenantColorSubmission = {
         firstName: 'John',
         color: 'blue',
+        tenantId: TEST_TENANT_ID
       };
       const mockRecord: ColorRecord = {
         pk: 'John',
@@ -36,7 +42,7 @@ describe('ColorService', () => {
       saveColorSubmissionSpy.mockResolvedValue(mockRecord as never);
 
       // Act
-      const result = await service.saveColor(submission);
+      const result = await service.saveColor(submission, TEST_TENANT_ID);
 
       // Assert
       expect(result).toEqual({
@@ -45,6 +51,10 @@ describe('ColorService', () => {
       });
       expect(saveColorSubmissionSpy).toHaveBeenCalledWith({
         pk: 'John',
+        sk: expect.stringMatching(/^COLOR#\d+$/),
+        tenantId: TEST_TENANT_ID,
+        firstName: 'John',
+        color: 'blue',
         colors: ['blue'],
         timestamp: expect.any(String)
       });
@@ -52,14 +62,27 @@ describe('ColorService', () => {
 
     it('should handle errors from saveColorSubmission', async () => {
       // Arrange
-      const submission: ColorSubmission = {
+      const submission: MultiTenantColorSubmission = {
         firstName: 'John',
         color: 'blue',
+        tenantId: TEST_TENANT_ID
       };
       saveColorSubmissionSpy.mockRejectedValue(new Error('DynamoDB error') as never);
 
       // Act & Assert
-      await expect(service.saveColor(submission)).rejects.toThrow('DynamoDB error');
+      await expect(service.saveColor(submission, TEST_TENANT_ID)).rejects.toThrow('DynamoDB error');
+    });
+
+    it('should throw error when tenant IDs do not match', async () => {
+      // Arrange
+      const submission: MultiTenantColorSubmission = {
+        firstName: 'John',
+        color: 'blue',
+        tenantId: 'different-tenant'
+      };
+
+      // Act & Assert
+      await expect(service.saveColor(submission, TEST_TENANT_ID)).rejects.toThrow('Unauthorized access to tenant');
     });
   });
 
@@ -77,14 +100,14 @@ describe('ColorService', () => {
       searchColorsSpy.mockResolvedValue(mockRecords as never);
 
       // Act
-      const result = await service.searchColors(firstName);
+      const result = await service.searchColors(TEST_TENANT_ID, firstName, TEST_TENANT_ID);
 
       // Assert
       expect(result).toEqual({
         data: mockRecords,
         statusCode: 200,
       });
-      expect(searchColorsSpy).toHaveBeenCalledWith(firstName);
+      expect(searchColorsSpy).toHaveBeenCalledWith(TEST_TENANT_ID, firstName);
     });
 
     it('should handle errors from searchColors', async () => {
@@ -93,7 +116,12 @@ describe('ColorService', () => {
       searchColorsSpy.mockRejectedValue(new Error('DynamoDB error') as never);
 
       // Act & Assert
-      await expect(service.searchColors(firstName)).rejects.toThrow('DynamoDB error');
+      await expect(service.searchColors(TEST_TENANT_ID, firstName, TEST_TENANT_ID)).rejects.toThrow('DynamoDB error');
+    });
+
+    it('should throw error when tenant IDs do not match', async () => {
+      // Act & Assert
+      await expect(service.searchColors('different-tenant', 'John', TEST_TENANT_ID)).rejects.toThrow('Unauthorized access to tenant');
     });
   });
 }); 

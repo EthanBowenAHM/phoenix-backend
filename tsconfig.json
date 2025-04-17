@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "CommonJS",
-    "lib": ["ES2020"],
+    "lib": ["ES2020", "DOM"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -20,6 +20,6 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
   },
-  "include": ["src/**/*", "scripts/**/*"],
+  "include": ["src/**/*", "scripts/**/*", "tests/**/*"],
   "exclude": ["node_modules", "tests", "dist"]
 } 
