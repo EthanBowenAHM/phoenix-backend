@@ -1,0 +1,102 @@
+# Coding pattern preferences
+
+– Always prefer simple solutions  
+– Avoid duplication of code whenever possible, which means checking for other areas of the codebase that might already have similar code and functionality  
+– Write code that takes into account the different environments: dev, test, and prod  
+– You are careful to only make changes that are requested or you are confident are well understood and related to the change being requested  
+– When fixing an issue or bug, do not introduce a new pattern or technology without first exhausting all options for the existing implementation. And if you finally do this, make sure to remove the old implementation afterwards so we don’t have duplicate logic.  
+– Keep the codebase very clean and organized  
+– Avoid writing scripts in files if possible, especially if the script is likely only to be run once  
+– Avoid having files over 200–300 lines of code. Refactor at that point.  
+– Mocking data is only needed for tests, never mock data for dev or prod  
+– Never add stubbing or fake data patterns to code that affects the dev or prod environments  
+– Never overwrite my .env file without first asking and confirming
+
+# Terraform (Infrastructure-as-Code) file rules
+– Always use remote state storage (like S3) and never store state files locally
+– Enable state locking (e.g., DynamoDB for AWS) to prevent concurrent modifications
+– Use consistent file naming: main.tf, variables.tf, outputs.tf, versions.tf
+– Implement proper workspace separation for different environments (dev, staging, prod)
+– Keep modules generic, reusable, and in a separate /modules directory
+– Use consistent naming conventions for all resources with environment and project tags
+– Declare all variable types and include descriptions for better documentation
+– Never commit secrets or sensitive data to version control
+– Lock provider and module versions to ensure consistency
+– Keep files under 200 lines of code and split complex configurations into smaller, logical files
+– Use data sources instead of hardcoding values
+– Implement count or for_each for similar resources to avoid repetition
+– Tag all resources for proper cost allocation and management
+– Document all modules with README files and usage examples
+– Run terraform fmt and terraform validate before any apply
+– Use pre-commit hooks and CI/CD pipeline validations
+– Implement least privilege access for all IAM roles and security groups
+– Use consistent tagging strategy across all resources
+– Never modify state files manually
+– Include cost estimation in the planning phase
+– Use terraform workspaces instead of copying configuration files
+– Implement automated testing and validation in CI/CD pipelines
+– Keep backend configurations separate for different environments
+– Use descriptive variable and resource names that indicate their purpose
+
+# Python file rules
+You are an expert in Python, FastAPI, and scalable API development.  
+
+1.) Key Principles:
+- Write concise, technical responses with accurate Python examples.
+- Use functional, declarative programming; avoid classes where possible.
+- Prefer iteration and modularization over code duplication.
+- Use descriptive variable names with auxiliary verbs (e.g., is_active, has_permission).
+- Use lowercase with underscores for directories and files (e.g., routers/user_routes.py).
+- Favor named exports for routes and utility functions.
+- Use the Receive an Object, Return an Object (RORO) pattern.  
+
+2.) Python/FastAPI:
+- Use def for pure functions and async def for asynchronous operations.
+- Use type hints for all function signatures. Prefer Pydantic models over raw dictionaries for input validation.
+- File structure: exported router, sub-routes, utilities, static content, types (models, schemas).
+- Avoid unnecessary curly braces in conditional statements.
+- For single-line statements in conditionals, omit curly braces.
+- Use concise, one-line syntax for simple conditional statements (e.g., if condition: do_something()).  
+
+3.) Error Handling and Validation:
+- Prioritize error handling and edge cases:  
+  - Handle errors and edge cases at the beginning of functions.  
+  - Use early returns for error conditions to avoid deeply nested if statements.  
+  - Place the happy path last in the function for improved readability.  
+  - Avoid unnecessary else statements; use the if-return pattern instead.  
+  - Use guard clauses to handle preconditions and invalid states early.  
+  - Implement proper error logging and user-friendly error messages.  
+  - Use custom error types or error factories for consistent error handling.  
+
+4.) Dependencies:
+- FastAPI
+- Pydantic v2
+- Async database libraries like asyncpg or aiomysql
+- SQLAlchemy 2.0 (if using ORM features)  
+
+5.) FastAPI-Specific Guidelines:
+- Use functional components (plain functions) and Pydantic models for input validation and response schemas.
+- Use declarative route definitions with clear return type annotations.
+- Use def for synchronous operations and async def for asynchronous ones.
+- Minimize @app.on_event("startup") and @app.on_event("shutdown"); prefer lifespan context managers for managing startup and shutdown events.
+- Use middleware for logging, error monitoring, and performance optimization.
+- Optimize for performance using async functions for I/O-bound tasks, caching strategies, and lazy loading.
+- Use HTTPException for expected errors and model them as specific HTTP responses.
+- Use middleware for handling unexpected errors, logging, and error monitoring.
+- Use Pydantic's BaseModel for consistent input/output validation and response schemas.   
+
+6.) Performance Optimization:
+- Minimize blocking I/O operations; use asynchronous operations for all database calls and external API requests.
+- Implement caching for static and frequently accessed data using tools like Redis or in-memory stores.
+- Optimize data serialization and deserialization with Pydantic.
+- Use lazy loading techniques for large datasets and substantial API responses.   
+
+7.) Key Conventions:
+1. Rely on FastAPI’s dependency injection system for managing state and shared resources.
+2. Prioritize API performance metrics (response time, latency, throughput).
+3. Limit blocking operations in routes:   
+   - Favor asynchronous and non-blocking flows.   
+   - Use dedicated async functions for database and external API operations.   
+   - Structure routes and dependencies clearly to optimize readability and maintainability.   
+
+8.)Refer to FastAPI documentation for Data Models, Path Operations, and Middleware for best practices.

@@ -1,0 +1,281 @@
+openapi: 3.0.0
+info:
+  title: Color API
+  description: API for managing user's colors with multi-tenant support
+  version: 1.0.0
+
+servers:
+  - url: https://{api-id}.execute-api.{region}.amazonaws.com/{stage}
+    variables:
+      api-id:
+        description: API Gateway ID
+        default: default
+      region:
+        default: us-east-1
+        description: AWS region
+      stage:
+        default: dev
+        enum:
+          - dev
+          - prod
+        description: API deployment stage
+
+components:
+  securitySchemes:
+    CognitoUserPool:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://{cognito-domain}.auth.{region}.amazoncognito.com/oauth2/authorize
+          scopes:
+            email: Access email
+            openid: Access OpenID Connect
+            profile: Access profile
+            custom:tenant_id: Access tenant ID
+
+  schemas:
+    ColorSubmission:
+      type: object
+      required:
+        - firstName
+        - color
+      properties:
+        firstName:
+          type: string
+          description: User's first name
+        color:
+          type: string
+          description: User's color
+
+    MultiTenantColorRecord:
+      type: object
+      required:
+        - pk
+        - sk
+        - tenantId
+        - colors
+        - timestamp
+      properties:
+        pk:
+          type: string
+          description: Partition key (TENANT#{tenantId}#USER#{firstName})
+        sk:
+          type: string
+          description: Sort key (COLOR#{timestamp})
+        tenantId:
+          type: string
+          description: Tenant identifier
+        colors:
+          type: array
+          items:
+            type: string
+          description: Array of colors submitted by the user
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the submission
+
+    ApiResponse:
+      type: object
+      required:
+        - statusCode
+      properties:
+        statusCode:
+          type: integer
+          description: HTTP status code
+        data:
+          description: Response data payload
+        message:
+          type: string
+          description: Optional message (primarily for errors)
+
+    ColorRecordResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MultiTenantColorRecord'
+
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          required:
+            - message
+          properties:
+            data:
+              type: null
+
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+paths:
+  /colors:
+    get:
+      summary: Search colors by first name within tenant
+      operationId: getColors
+      security:
+        - CognitoUserPool:
+            - email
+            - openid
+            - profile
+            - custom:tenant_id
+      parameters:
+        - in: query
+          name: firstName
+          required: true
+          schema:
+            type: string
+          description: First name to search for
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ColorRecordResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: Forbidden - Authorization failed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - statusCode
+                  - message
+                  - errorType
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 403
+                  message:
+                    type: string
+                    description: Detailed error message
+                  errorType:
+                    type: string
+                    enum:
+                      - INVALID_TENANT_ID
+                      - MISSING_TENANT_ID
+                      - UNAUTHORIZED_ACCESS
+                    description: Type of authorization error
+        '500':
+          $ref: '#/components/responses/Error'
+      x-amazon-apigateway-integration:
+        uri: ${lambda_invoke_arn}
+        passthroughBehavior: when_no_match
+        httpMethod: POST
+        type: aws_proxy
+
+    post:
+      summary: Submit a new color within tenant
+      operationId: postColors
+      security:
+        - CognitoUserPool:
+            - email
+            - openid
+            - profile
+            - custom:tenant_id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ColorSubmission'
+      responses:
+        '201':
+          description: Color successfully submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ColorRecordResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: Forbidden - Authorization failed
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - statusCode
+                  - message
+                  - errorType
+                properties:
+                  statusCode:
+                    type: integer
+                    example: 403
+                  message:
+                    type: string
+                    description: Detailed error message
+                  errorType:
+                    type: string
+                    enum:
+                      - INVALID_TENANT_ID
+                      - MISSING_TENANT_ID
+                      - UNAUTHORIZED_ACCESS
+                    description: Type of authorization error
+        '500':
+          $ref: '#/components/responses/Error'
+      x-amazon-apigateway-integration:
+        uri: ${lambda_invoke_arn}
+        passthroughBehavior: when_no_match
+        httpMethod: POST
+        type: aws_proxy
+
+    options:
+      summary: CORS preflight request
+      operationId: optionsColors
+      responses:
+        '200':
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+            Access-Control-Max-Age:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        uri: ${lambda_invoke_arn}
+        passthroughBehavior: when_no_match
+        httpMethod: POST
+        type: aws_proxy
+
+x-amazon-apigateway-binary-media-types:
+  - '*/*'
+
+x-amazon-apigateway-request-validators:
+  full:
+    validateRequestBody: true
+    validateRequestParameters: true
+
+x-amazon-apigateway-cors:
+  allowOrigins:
+    - '*'
+  allowMethods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  allowHeaders:
+    - Content-Type
+    - Authorization
+    - X-Amz-Date
+    - X-Api-Key
+    - X-Amz-Security-Token
+  maxAge: 3600
