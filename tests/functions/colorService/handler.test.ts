@@ -8,6 +8,27 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { ColorService } from '../../../src/functions/colorService/service';
 import { ColorSubmission } from '../../../src/generated/server';
 
+// Mock the entire AWS SDK module
+jest.mock('@aws-sdk/client-sts', () => {
+  return {
+    STSClient: function() {
+      return {
+        send: () => Promise.resolve({
+          Credentials: {
+            AccessKeyId: 'mock-access-key',
+            SecretAccessKey: 'mock-secret-key',
+            SessionToken: 'mock-session-token',
+            Expiration: new Date()
+          }
+        })
+      };
+    },
+    AssumeRoleCommand: function() { return {}; }
+  };
+});
+
+jest.mock('../../../src/functions/colorService/service');
+
 interface MultiTenantColorSubmission extends ColorSubmission {
   tenantId: string;
 }
@@ -71,7 +92,7 @@ const createMockEvent = (options: {
 describe('colorService Lambda', () => {
   let saveColorSpy: any;
   let searchColorsSpy: any;
-  const TEST_TENANT_ID = 'test-tenant';
+  const TEST_TENANT_ID = 'test-tenant-123';
 
   beforeEach(() => {
     jest.clearAllMocks();

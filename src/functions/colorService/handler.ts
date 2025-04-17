@@ -3,21 +3,28 @@ import { ColorService } from './service';
 import { DynamoDbConnector } from '@shared/dynamodb';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import DEBUG from '@shared/debug';
+import { ColorRecord, ColorRecordResponse } from '@generated/server/model/models';
+import { successResponse, badResponse, errorResponse, createAuthorizationError as authErrorResponse, AuthorizationError } from './responses';
 
 const stsClient = new STSClient({});
+async function validateTenant(tenantId: string | undefined): Promise<{ tenantId: string }> {
+  // Check for missing tenant ID
+  if (!tenantId) {
+    throw authErrorResponse(
+      'MISSING_TENANT_ID',
+      'Tenant ID not found in token claims'
+    );
+  }
 
-interface AuthorizationError {
-  statusCode: number;
-  message: string;
-  errorType: 'INVALID_TENANT_ID' | 'MISSING_TENANT_ID' | 'UNAUTHORIZED_ACCESS';
-}
+  // Validate tenant ID format
+  if (!/^[a-zA-Z0-9-]+$/.test(tenantId)) {
+    throw authErrorResponse(
+      'INVALID_TENANT_ID',
+      'Invalid tenant ID format'
+    );
+  }
 
-function createAuthorizationError(type: AuthorizationError['errorType'], message: string): AuthorizationError {
-  return {
-    statusCode: 403,
-    message,
-    errorType: type
-  };
+  return { tenantId };
 }
 
 async function getTenantCredentials(tenantId: string) {
@@ -41,45 +48,10 @@ async function getTenantCredentials(tenantId: string) {
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   try {
     const tenantId = event.requestContext.authorizer?.claims['custom:tenant_id'];
+    await validateTenant(tenantId);
     
-    // Check for missing tenant ID
-    if (!tenantId) {
-      const error = createAuthorizationError(
-        'MISSING_TENANT_ID',
-        'Tenant ID not found in token claims'
-      );
-      return {
-        statusCode: error.statusCode,
-        body: JSON.stringify(error)
-      };
-    }
-
-    // Validate tenant ID format
-    if (!/^[a-zA-Z0-9-]+$/.test(tenantId)) {
-      const error = createAuthorizationError(
-        'INVALID_TENANT_ID',
-        'Invalid tenant ID format'
-      );
-      return {
-        statusCode: error.statusCode,
-        body: JSON.stringify(error)
-      };
-    }
-
-    let credentials;
-    try {
-      credentials = await getTenantCredentials(tenantId);
-    } catch (error) {
-      const authError = createAuthorizationError(
-        'INVALID_TENANT_ID',
-        'Failed to assume tenant role - tenant may not exist'
-      );
-      return {
-        statusCode: authError.statusCode,
-        body: JSON.stringify(authError)
-      };
-    }
-
+    const credentials = await getTenantCredentials(tenantId);
+    
     const dynamoDbConnector = new DynamoDbConnector(undefined, credentials);
     const colorService = new ColorService(dynamoDbConnector);
 
@@ -88,37 +60,26 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       
       // Verify the request is for the correct tenant
       if (body.tenantId && body.tenantId !== tenantId) {
-        const error = createAuthorizationError(
+        return authErrorResponse(
           'UNAUTHORIZED_ACCESS',
           'Cannot submit colors for a different tenant'
         );
-        return {
-          statusCode: error.statusCode,
-          body: JSON.stringify(error)
-        };
       }
 
       const result = await colorService.saveColor(
-        { ...body, tenantId },
+        { ...body, tenantId: tenantId },
         tenantId
       );
-      return {
-        statusCode: result.statusCode,
-        body: JSON.stringify(result.data)
-      };
+      return successResponse(result.data);
     } else if (event.httpMethod === 'GET') {
       const firstName = event.queryStringParameters?.firstName;
       
       // Verify the request is for the correct tenant
       if (event.queryStringParameters?.tenantId && event.queryStringParameters.tenantId !== tenantId) {
-        const error = createAuthorizationError(
+        return authErrorResponse(
           'UNAUTHORIZED_ACCESS',
           'Cannot access colors from a different tenant'
         );
-        return {
-          statusCode: error.statusCode,
-          body: JSON.stringify(error)
-        };
       }
 
       const result = await colorService.searchColors(
@@ -126,21 +87,12 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         firstName,
         tenantId
       );
-      return {
-        statusCode: result.statusCode,
-        body: JSON.stringify(result.data)
-      };
+      return successResponse(result.data);
     }
 
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ message: 'Method not allowed' })
-    };
+    return badResponse('Method not allowed', 405);
   } catch (error) {
     DEBUG('Error in handler: %O', error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ message: 'Internal server error' })
-    };
+    return errorResponse(error as Error);
   }
 }

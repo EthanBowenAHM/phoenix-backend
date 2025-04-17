@@ -16,20 +16,13 @@ const createResponse = (statusCode: number, body: ColorRecordResponse | ErrorRes
 });
 
 export function successResponse(data: ColorRecord | null, statusCode?: number): APIGatewayProxyResult;
-export function successResponse(data: ColorRecord | null, statusCode = 200): APIGatewayProxyResult {
-  if (Array.isArray(data)) {
-    const response: ColorRecordResponse = {
-      statusCode,
-      data: data
-    };
-    return createResponse(statusCode, response);
-  } else {
-    const response: ColorRecordResponse = {
-      statusCode,
-      data: data || undefined
-    };
-    return createResponse(statusCode, response);
-  }
+export function successResponse(data: ColorRecord[], statusCode?: number): APIGatewayProxyResult;
+export function successResponse(data: ColorRecord | ColorRecord[] | null, statusCode = 200): APIGatewayProxyResult {
+  const response: ColorRecordResponse = {
+    statusCode,
+    data: Array.isArray(data) ? data[0] : data || undefined
+  };
+  return createResponse(statusCode, response);
 }
 
 export const badResponse = (message: string, statusCode = 400): APIGatewayProxyResult => {
@@ -48,3 +41,14 @@ export const errorResponse = (error: Error): APIGatewayProxyResult => {
   };
   return createResponse(500, response);
 }; 
+
+export interface AuthorizationError {
+  statusCode: number;
+  message: string;
+  errorType: 'INVALID_TENANT_ID' | 'MISSING_TENANT_ID' | 'UNAUTHORIZED_ACCESS';
+}
+
+export function createAuthorizationError(type: AuthorizationError['errorType'], message: string): APIGatewayProxyResult {
+  return badResponse(`[${type}] ${message}`, 403);
+}
+

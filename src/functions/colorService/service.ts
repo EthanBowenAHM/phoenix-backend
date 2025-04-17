@@ -24,8 +24,8 @@ export class ColorService {
     this.dynamodbConnector = dynamodDbConnector || new DynamoDbConnector();
   }
 
-  private verifyTenantAccess(userTenantId: string, requestTenantId: string): void {
-    if (userTenantId !== requestTenantId) {
+  private verifyTenantAccess(requestTenantId: string,userTenantId?: string): void {
+    if (userTenantId && userTenantId !== requestTenantId) {
       throw new Error('Unauthorized access to tenant');
     }
   }
@@ -34,7 +34,7 @@ export class ColorService {
     submission: MultiTenantColorSubmission,
     userTenantId: string
   ): Promise<{ data: ColorRecord; statusCode: number }> {
-    this.verifyTenantAccess(userTenantId, submission.tenantId);
+    this.verifyTenantAccess(submission.tenantId, userTenantId);
     
     const dynamoRecord: MultiTenantColorRecord = {
       pk: submission.firstName,
@@ -61,9 +61,7 @@ export class ColorService {
     firstName?: string,
     userTenantId?: string
   ): Promise<{ data: ColorRecord[]; statusCode: number }> {
-    if (userTenantId) {
-      this.verifyTenantAccess(userTenantId, tenantId);
-    }
+    this.verifyTenantAccess(tenantId, userTenantId);
 
     const result = await this.dynamodbConnector.searchColors(tenantId, firstName);
     DEBUG('Found dynamo records: %O', result);
@@ -79,7 +77,7 @@ export class ColorService {
     userTenantId?: string
   ): Promise<{ data: ColorRecord[]; statusCode: number }> {
     if (userTenantId) {
-      this.verifyTenantAccess(userTenantId, tenantId);
+      this.verifyTenantAccess(tenantId, userTenantId);
     }
 
     const result = await this.dynamodbConnector.getColorsByTenant(tenantId);
