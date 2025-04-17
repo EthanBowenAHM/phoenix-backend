@@ -1,5 +1,0 @@
-{
-  "AWS_REGION": "us-east-1",
-  "PROJECT_NAME": "color",
-  "TERRAFORM_STATE_BUCKET": "color-service-terraform-state"
-}
